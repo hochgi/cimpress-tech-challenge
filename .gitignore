@@ -2,3 +2,8 @@ php-example.php
 python-example.py
 README.txt
 ruby-example.rb
+/RUNNING_PID
+/logs/
+/project/project/
+/project/target/
+/target/

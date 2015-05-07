@@ -8,3 +8,5 @@ ruby-example.rb
 /project/target/
 /target/
 /.idea/
+/key
+/sample_reply.txt

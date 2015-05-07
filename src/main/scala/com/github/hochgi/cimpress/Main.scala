@@ -4,7 +4,7 @@ import org.rogach.scallop.ScallopConf
 
 import scala.concurrent.Await
 import scala.concurrent.duration.Duration
-
+import scala.concurrent.ExecutionContext.Implicits.global
 
 object Main extends App {
 
@@ -32,11 +32,11 @@ object Main extends App {
   val key = Conf.key.get.get
   var quit = false
 
-  while(!quit && loop) {
+  while(!quit) {
     val puzzle = Http.getPuzzle(key,mode)
     val solution = Await.result(puzzle.map(Logic.solve),Duration.Inf) //TODO: Await indefinately?
     val score = Http.postSolution(solution, key)
     println(score + "\n")
-    quit = scala.io.StdIn.readLine("type `quit` or exit to quit, any key to continue:").toLowerCase.matches("quit|exit")
+    quit = !loop && scala.io.StdIn.readLine("type `quit` or exit to quit, any key to continue:").toLowerCase.matches("quit|exit")
   }
 }

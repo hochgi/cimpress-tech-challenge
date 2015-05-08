@@ -11,7 +11,11 @@ object Logic {
   case class Solution(id: String,squares: Vector[Square])
 
   def solve(puzzle: Puzzle): Solution = {
-    println(puzzle)
-    Solution(puzzle.id, Vector(Square(1,1,5)))
+    val squares = for {
+      (row,i) <- puzzle.puzzle zip (0 until puzzle.height)
+      (sqr,j) <- row zip (0 until puzzle.width)
+      if sqr
+    } yield Square(j,i,1)
+    Solution(puzzle.id, squares)
   }
 }

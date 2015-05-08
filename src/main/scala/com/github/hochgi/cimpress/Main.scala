@@ -34,9 +34,10 @@ object Main extends App {
 
   while(!quit) {
     val puzzle = Http.getPuzzle(key,mode)
-    val solution = Await.result(puzzle.map(Logic.solve),Duration.Inf) //TODO: Await indefinately?
-    val score = Http.postSolution(solution, key)
+    val future = puzzle.map(Logic.solve).flatMap(Http.postSolution(_, key))
+    val score = Await.result(future,Duration.Inf) //TODO: Await indefinately?
     println(score + "\n")
-    quit = !loop && scala.io.StdIn.readLine("type `quit` or exit to quit, any key to continue:").toLowerCase.matches("quit|exit")
+    quit = !loop && scala.io.StdIn.readLine("type `quit` or `exit` to quit, ENTER to continue:").toLowerCase.matches("quit|exit")
   }
+  Http.shutdown
 }

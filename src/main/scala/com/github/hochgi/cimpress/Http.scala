@@ -78,33 +78,22 @@ object Http extends SprayJsonSupport with AdditionalFormats {
 
   def getPuzzle(key: String, mode: String = "trial"): Future[Puzzle] = {
     require(Set("trial","contest")(mode))
+
     val uri = cimpress + s"/$key/$mode/puzzle"
-
-    //TODO: real code
     val resFut = (IO(spray.can.Http) ? HttpRequest(GET, Uri(uri))).mapTo[HttpResponse]
-
-    //TODO: remove demo code
-//    val resFut = Future.successful(HttpResponse(
-//      StatusCodes.OK,
-//      HttpEntity("""{"width":31,"height":23,"puzzle":[[true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true],[true,true,true,true,true,false,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true],[true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true],[true,true,true,true,true,true,true,true,true,true,true,true,true,false,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true],[true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,false,false,true,true,true,true,true,true,true,true,true],[true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,false,true,true,true,true,true,true,true,true,true],[true,true,true,true,true,true,true,true,true,false,true,true,true,true,true,true,true,true,true,true,true,true,false,true,true,true,true,true,true,true,true],[true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true],[true,true,true,true,false,true,true,true,true,true,true,true,true,true,false,true,true,true,true,false,true,true,true,true,true,true,true,true,true,true,false],[true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true],[true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true],[true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true],[true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true],[true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true],[true,true,true,true,true,false,false,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true],[true,true,true,true,true,true,true,true,true,true,false,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true],[true,true,true,true,true,false,true,true,true,true,true,true,true,true,true,true,true,true,false,true,true,true,true,true,true,true,true,true,true,true,true],[true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true],[true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true],[true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,false,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true],[true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true],[true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,false,true],[true,true,true,true,true,true,true,true,true,false,true,true,false,true,true,true,false,true,true,true,false,true,true,true,true,true,true,true,true,true,true]],"id":"9ba603ec5844475daff91edd06b7726e-14310019118196075"}"""),
-//      Nil))
-    //END OF DEMO CODE
 
     resFut.collect{
       case response if response.status.isSuccess => {
-        val j = response.entity.asString
-        //TODO: remove println
-        println(s"\n$j\n")
-        PuzzleJsonFormat.read(j.parseJson)
+        response.entity.asString.parseJson.convertTo[Puzzle]
       }
     }
   }
 
   def postSolution(solution: Solution, key: String, mode: String = "trial"): Future[String] = {
     require(Set("trial","contest")(mode))
-    val uri = cimpress + s"/$key/$mode/solution"
 
-    val body = HttpEntity(SolutionJsonFormat.write(solution).compactPrint)
+    val uri = cimpress + s"/$key/$mode/solution"
+    val body = HttpEntity(solution.toJson.compactPrint)
     val resFut = (IO(spray.can.Http) ? HttpRequest(POST, Uri(uri), Nil, body)).mapTo[HttpResponse]
 
     resFut.collect{

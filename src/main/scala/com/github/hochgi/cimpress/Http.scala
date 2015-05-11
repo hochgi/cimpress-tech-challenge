@@ -45,7 +45,7 @@ object Http extends SprayJsonSupport with AdditionalFormats {
             }
             case _ => deserializationError("puzzle isn't an array, or it's an array of invalid height")
           }
-          Puzzle(id, width, height, puzzle)
+          Puzzle(id, width, height, puzzle, System.currentTimeMillis())
         }
         case _ => deserializationError("malformed format")
       }
@@ -84,7 +84,9 @@ object Http extends SprayJsonSupport with AdditionalFormats {
 
     resFut.collect{
       case response if response.status.isSuccess => {
-        response.entity.asString.parseJson.convertTo[Puzzle]
+        val j = response.entity.asString.parseJson
+        println(j.compactPrint + "\n")
+        j.convertTo[Puzzle]
       }
     }
   }
@@ -93,7 +95,9 @@ object Http extends SprayJsonSupport with AdditionalFormats {
     require(Set("trial","contest")(mode))
 
     val uri = cimpress + s"/$key/$mode/solution"
-    val body = HttpEntity(solution.toJson.compactPrint)
+    val j = solution.toJson
+    println(j.compactPrint + "\n")
+    val body = HttpEntity(j.compactPrint)
     val resFut = (IO(spray.can.Http) ? HttpRequest(POST, Uri(uri), Nil, body)).mapTo[HttpResponse]
 
     resFut.collect{

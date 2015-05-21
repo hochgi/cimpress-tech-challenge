@@ -4,121 +4,178 @@ package com.github.hochgi.cimpress
  * Created by gilad on 5/6/15.
  */
 object Logic {
+
+
   type Grid = Vector[Vector[Boolean]]
+
+  implicit class GridOps(g: Grid) {
+    def isCovered = g.forall(_.forall(!identity(_)))
+    def withIndex = g.zipWithIndex.map{
+      case (row,i) => row.zipWithIndex.map{
+        case (b,j) => b -> (i,j)
+      }
+    }
+    def coverWith(square: Square): Grid = Vector.tabulate(g.size, g.head.size) {
+      (i, j) =>
+        if (square.contain(i, j)) false
+        else g(i)(j)
+    }
+    def mostUpperLeftUncovered: Option[(Int,Int)] = g
+      .withIndex
+      .find(_.exists(!_._1))
+      .flatMap(_.find(!_._1).map(_._2))
+    def squaresAt(i: Int, j: Int, sizeLimit: Int = math.min(g.size,g.head.size)): Seq[Square] = {
+      var rad = 0
+      while((0 to rad).forall(k => g(i+rad)(j+k) && g(i+k)(j+rad))) {
+        rad += 1
+      }
+      (1 to rad).map(Square(i,j,_))
+    }
+  }
+
   case class Puzzle(id: String, width: Int, height: Int, puzzle: Grid, timeInMillis: Long)
 
   case class Square(x: Int, y: Int, size: Int) {
-    def contain(i: Int,j: Int): Boolean = j >= x && j < (x + size) && i >= y && i < (y + size)
+    def contain(i: Int, j: Int): Boolean = j >= x && j < (x + size) && i >= y && i < (y + size)
   }
-  case class Solution(id: String,squares: Vector[Square])
 
-  val limit = 7
+  case class Solution(id: String, squares: Vector[Square])
 
-  //TODO: A* like with time limit
-  /**
-   * g := #squares taken in cover / %grid that is covered
-   * h := %grid that is uncovered / 100 millis passed
-   */
-  def solve(puzzle: Puzzle): Solution = puzzle match {
-    case Puzzle(id, width, height, puzzle, timeInMillis) => {
-      val maxSize = math.min(height, height)
-      val xs = chooseTiling(width,height,maxSize,puzzle,timeInMillis)
-      Solution(id,xs.toVector)
+  trait Solver {
+    def puzzle: Puzzle
+    def solve: Solution
+    def maxSquareSize = math.min(puzzle.width, puzzle.height)
+  }
+
+  object Solver {
+    def apply(puzzle: Puzzle, strategy: String = "RandomGreedy"): Solver = strategy match {
+      case "RandomGreedy" =>  RandomGreedy(puzzle)
+      case "SuperGreedyAStar" => SuperGreedyAStar(puzzle)
     }
   }
 
-  def g(size: Int, grid: Grid, numOfSquares: Int) = {
-    val covered = grid.flatMap(_.collect{case true => 1}).sum.toDouble / size
-    covered * numOfSquares
-  }
+  case class RandomGreedy(puzzle: Puzzle) extends Solver {
 
-  def h(size : Int, grid: Grid, startTime: Long) = {
-    val toCover = grid.flatMap(_.collect{case false => 1}).sum.toDouble / size
-    val timePassed = (System.currentTimeMillis() - startTime) match {
-      case t if t < 100 => 1.0
-      case t => t / 100.0
+    def solve: Solution = puzzle match {
+      case Puzzle(id, width, height, puzzle, _) => {
+        val xs = chooseTiling(width, height, maxSquareSize, puzzle)
+        Solution(id, xs.toVector)
+      }
     }
-    toCover / timePassed
-  }
 
-  def chooseTiling(width: Int, height: Int, size: Int, grid: Grid, startTime: Long): List[Square] = size match {
-    case 1 => {
-      val xs = for {
+    def chooseTiling(width: Int, height: Int, size: Int, grid: Grid): List[Square] = size match {
+      case 1 => {
+        val xs = for {
+          i <- 0 to (height - size)
+          j <- 0 to (width - size)
+          if grid(i)(j)
+        } yield Square(j, i, 1)
+        xs.toList
+      }
+      case n => {
+        validSquares(width, height, size, grid) match {
+          case Nil => chooseTiling(width, height, size - 1, grid)
+          case squares => {
+            val newSize =
+              if (squares.size == 1) size - 1
+              else size
+            val sqr = squares(scala.util.Random.nextInt(squares.size))
+            val grd = Vector.tabulate(height, width) { (i, j) =>
+              if (sqr.contain(i, j)) false
+              else grid(i)(j)
+            }
+            sqr :: chooseTiling(width, height, newSize, grd)
+          }
+        }
+      }
+    }
+
+    def validSquares(width: Int, height: Int, size: Int, grid: Grid): Seq[Square] = {
+      var counter = 0
+      val range = 0 until size
+      for {
         i <- 0 to (height - size)
         j <- 0 to (width - size)
-        if grid(i)(j)
-      } yield Square(j,i,1)
-      xs.toList
+        if range.forall(a => range.forall(b => grid(i + a)(j + b)))
+      } yield {
+        counter = counter + 1
+        Square(j, i, size)
+      }
     }
-    case n => {
-      validSquares(width,height,size,grid) match {
-        case Nil => chooseTiling(width,height,size-1,grid,startTime)
-        case squares => {
-          val newSize =
-            if(squares.size == 1) size - 1
-            else size
-          val sqr = squares(scala.util.Random.nextInt(squares.size))
-          val grd = Vector.tabulate(height, width) { (i, j) =>
-            if(sqr.contain(i,j)) false
-            else grid(i)(j)
+  }
+
+  abstract class AStar(val puzzle: Puzzle) extends Solver {
+    def h(covered: Grid, squares: Seq[Square]): Double
+    def g(covered: Grid, squares: Seq[Square]): Double
+    def f(covered: Grid, squares: Seq[Square]): Double = h(covered,squares) + g(covered,squares)
+
+    case class PartialSolution(covered: Grid, squares: Seq[Square]) {
+      def getSolution: Solution =
+        if(covered.isCovered) Solution(puzzle.id, squares.toVector)
+        else throw new NoSuchElementException("Partial solution is partial and cannot produce a full solution")
+    }
+
+    implicit object PartialSolutionOrdering extends Ordering[PartialSolution]{
+      override def compare(x: PartialSolution, y: PartialSolution): Int = {
+        val xRank = f(x.covered,x.squares)
+        val yRank = f(y.covered,y.squares)
+
+        if(xRank > yRank) scala.math.ceil(xRank - yRank).toInt
+        else if(xRank < yRank) scala.math.ceil(yRank - xRank).toInt
+        else 0
+      }
+    }
+
+    val queue = scala.collection.mutable.PriorityQueue.empty[PartialSolution]
+    val grid = puzzle.puzzle
+
+    def solve: Solution = puzzle match {
+      case Puzzle(id, width, height, grid, _) => {
+        grid.mostUpperLeftUncovered match {
+          case None => Solution (id, Vector.empty[Square])
+          case Some((i,j)) => {
+            grid.squaresAt(i,j,maxSquareSize).foreach{sqr =>
+              queue.enqueue(PartialSolution(grid.coverWith(sqr), Seq(sqr)))
+            }
+            aStar(queue.dequeue())
           }
-          sqr :: chooseTiling(width, height, newSize, grd, startTime)
+        }
+      }
+    }
+
+    def aStar(ps: PartialSolution): Solution = ps match {
+      case PartialSolution(g,squares) => g.mostUpperLeftUncovered match {
+        case None => ps.getSolution
+        case Some((i, j)) => {
+          grid.squaresAt (i, j, maxSquareSize).foreach{ sqr =>
+            queue.enqueue(PartialSolution(g.coverWith(sqr),squares :+ sqr))
+          }
+          aStar(queue.dequeue())
         }
       }
     }
   }
 
-  def validSquares(width: Int, height: Int, size: Int, grid: Grid): Seq[Square] = {
-    var counter = 0
-    val range = 0 until size
-    for {
-      i <- 0 to (height - size)
-      j <- 0 to (width - size)
-//      if counter < limit
-      if range.forall(a => range.forall(b => grid(i+a)(j+b)))
-    } yield {
-      counter = counter + 1
-      Square(j,i,size)
-    }
+  object SuperGreedyAStar {
+    def apply(puzzle: Puzzle): SuperGreedyAStar = new SuperGreedyAStar(puzzle: Puzzle)
   }
 
-//  def solve(puzzle: Puzzle): Solution = {
-//    val squares = for {
-//      (row,i) <- puzzle.puzzle zip (0 until puzzle.height)
-//      (sqr,j) <- row zip (0 until puzzle.width)
-//      if sqr
-//    } yield Square(j,i,1)
-//    Solution(puzzle.id, squares)
-//  }
-//
-
-//  def merge(j: Int, i: Int, squares: Seq[Square]) = {
-//    squares.find{
-//      case Square(x,y,size) =>
+  class SuperGreedyAStar(puzzle: Puzzle) extends AStar(puzzle) {
+//    val superGreedyCover = {
+//      def mostCoverWithOverlapsSquares(): Seq[Square] = ???
+//      def rec(acc: Seq[Square], uncovered: Grid): Seq[Square] = {
+//        if(uncovered.isCovered) acc
+//        else {
+//          mostCoverWithOverlapsSquares() map {sqr =>
+//            rec(acc :+ sqr, uncovered.coverWith(sqr))
+//          }
+//        }
+//      }
 //    }
-//    ???
-//  }
-
-//  def tileSquares(puzzle: Grid, squares: Vector[Square])(f: Grid => (Grid,Square)): Vector[Square] = {
-//    if(puzzle.forall(_.forall(!_))) squares
-//    else {
-//      val (g,s) = f(puzzle)
-//      tileSquares(g,squares :+ s)(f)
-//    }
-//  }
-//
-//  def chooseSquare(g: Grid, width: Int, height: Int, maxSize: Int, acc: List[Square] = Nil): (Grid,Seq[Square]) = maxSize match {
-//    case 1 => emptyGrid(width, height) -> ((for {
-//      (row,i) <- g zip (0 until height)
-//      (sqr,j) <- row zip (0 until width)
-//      if sqr
-//    } yield Square(j,i,1)) ++ acc)
-//    case n => for {
-//      i <- (0 to (height - maxSize))
-//      j <- (0 to (width - maxSize))
-//      if g.drop(i).take(maxSize)
-//    }
-//  }
-//
-//  private def emptyGrid(width: Int, height: Int): Grid = (1 to height).map(_ => (1 to width).map(_ => false).toVector).toVector
+    def h(covered: Grid, squares: Seq[Square]): Double = ???
+    def g(covered: Grid, squares: Seq[Square]): Double = squares.size
+  }
 }
+
+
+

@@ -27,10 +27,14 @@ object Main extends App {
 
   while(!quit) {
     val puzzle = Http.getPuzzle(key,mode)
-    val solved = puzzle.map(Logic.solve)
+    val solved = puzzle.map(Logic.Solver(_, "RandomGreedy").solve)
+    val solved2 = puzzle.map(Logic.Solver(_, "SuperGreedyAStar").solve)
     val future = solved.flatMap(Http.postSolution(_, key))
+    val future2 = solved2.flatMap(Http.postSolution(_, key))
     val score = Await.result(future,Duration.Inf) //TODO: Await indefinately?
-    println(score + "\n")
+    println(score + "\n\n")
+    val score2 = Await.result(future2,Duration.Inf) //TODO: Await indefinately?
+    println(score2 + "\n\n")
     val input = scala.io.StdIn.readLine("type `quit` or `exit` to quit, `c`/`contest` or `t`/`trial` to switch mode, ENTER to continue:").toLowerCase
     if(input.matches("c|contest")) mode = "contest"
     else if(input.matches("t|trial")) mode = "trial"

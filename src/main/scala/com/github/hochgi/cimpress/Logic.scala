@@ -207,12 +207,7 @@ object Logic {
         if(uncovered.isCovered) acc
         else {
           fw.append(grid.pretty(uncovered) + "\n\n")
-          val sqr = viableSquares.maxBy(s =>
-            if(grid.canCoverWith(s)) {
-              s.coverCount(uncovered)
-            }
-            else -1
-          )
+          val sqr = viableSquares.maxBy(_.coverCount(uncovered))
           fw.append(s"going to cover with: $sqr\nwhich covers ${sqr.coverCount(uncovered)}\n\n")
           rec(sqr :: acc, uncovered.coverWith(sqr), viableSquares - sqr)
         }

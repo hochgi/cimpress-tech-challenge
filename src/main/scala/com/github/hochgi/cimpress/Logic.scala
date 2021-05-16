@@ -72,7 +72,7 @@ object Logic {
 
   case class Square(x: Int, y: Int, size: Int) {
     def contain(i: Int, j: Int): Boolean = j >= x && j < (x + size) && i >= y && i < (y + size)
-    def coverCount(grid: Grid): Int = grid.drop(y-1).take(size).flatMap(_.drop(x-1).take(size)).count(identity)
+    def coverCount(grid: Grid): Int = grid.drop(y).take(size).flatMap(_.drop(x).take(size)).count(identity)
   }
 
   case class Solution(id: String, squares: Vector[Square])
